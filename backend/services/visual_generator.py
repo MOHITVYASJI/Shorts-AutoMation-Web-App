@@ -1,23 +1,21 @@
-"""Visual content generation service using OpenAI DALL-E and Gemini Imagen"""
+"""Visual content generation service using OpenAI DALL-E and Gemini Nano Banana"""
 import logging
 from typing import List, Optional, Dict
 import os
 import uuid
 import httpx
+import base64
 from pathlib import Path
 import openai
-import google.generativeai as genai
+from emergentintegrations.llm.chat import LlmChat, UserMessage
 from config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Configure AI services
+# Configure OpenAI
 if settings.openai_api_key:
     openai.api_key = settings.openai_api_key
-
-if settings.gemini_api_key:
-    genai.configure(api_key=settings.gemini_api_key)
 
 
 class VisualGenerationError(Exception):
@@ -30,7 +28,8 @@ class VisualGenerator:
     
     def __init__(self):
         self.openai_available = bool(settings.openai_api_key)
-        self.gemini_available = bool(settings.gemini_api_key)
+        self.emergent_key = settings.emergent_llm_key if hasattr(settings, 'emergent_llm_key') else None
+        self.gemini_available = bool(self.emergent_key) or bool(settings.gemini_api_key)
         
         if not self.openai_available and not self.gemini_available:
             logger.warning("No AI API keys configured. Visual generation will fail.")
@@ -104,10 +103,52 @@ Requirements:
             raise VisualGenerationError(f"DALL-E generation failed: {str(e)}")
     
     async def generate_image_with_gemini(self, prompt: str) -> str:
-        """Generate image using Gemini Imagen (placeholder - requires Vertex AI setup)"""
-        # Note: Gemini image generation requires Google Cloud Vertex AI setup
-        # This is a placeholder for future implementation
-        raise VisualGenerationError("Gemini image generation not yet implemented. Please use DALL-E.")
+        """Generate image using Gemini Nano Banana"""
+        try:
+            logger.info("Generating image with Gemini Nano Banana...")
+            
+            # Use Emergent LLM key for Gemini Nano Banana
+            api_key = self.emergent_key or settings.gemini_api_key
+            
+            # Initialize chat with Gemini Nano Banana model
+            chat = LlmChat(
+                api_key=api_key,
+                session_id=f"visual_gen_{uuid.uuid4()}",
+                system_message="You are an expert image generator creating high-quality visuals for short-form video content."
+            ).with_model("gemini", "gemini-3-pro-image-preview").with_params(modalities=["image", "text"])
+            
+            # Create user message with prompt
+            msg = UserMessage(text=prompt)
+            
+            # Generate image and get response
+            text, images = await chat.send_message_multimodal_response(msg)
+            
+            if not images or len(images) == 0:
+                raise VisualGenerationError("Gemini did not return any images")
+            
+            # Get the first generated image
+            image_data = images[0]
+            
+            # Decode base64 image data
+            image_bytes = base64.b64decode(image_data['data'])
+            
+            # Generate filename and save
+            image_filename = f"visual_{uuid.uuid4()}.png"
+            image_path = os.path.join(settings.image_storage_path, image_filename)
+            
+            # Ensure directory exists
+            Path(settings.image_storage_path).mkdir(parents=True, exist_ok=True)
+            
+            # Save image
+            with open(image_path, "wb") as f:
+                f.write(image_bytes)
+            
+            logger.info(f"Image generated successfully with Gemini Nano Banana: {image_path}")
+            return image_path
+            
+        except Exception as e:
+            logger.error(f"Gemini Nano Banana image generation failed: {str(e)}")
+            raise VisualGenerationError(f"Gemini generation failed: {str(e)}")
     
     async def generate_visuals(self, script_data: Dict, niche: str, count: int = 3, style: str = "realistic") -> List[str]:
         """Generate multiple images for a video
@@ -130,12 +171,31 @@ Requirements:
         # Generate base prompt
         base_prompt = self._create_image_prompt(script_data, niche, style)
         
-        # Generate images (currently one at a time with DALL-E)
+        # Try Gemini Nano Banana first (if available), then OpenAI DALL-E
         try:
-            if self.openai_available:
-                # For multiple images, we'll generate them sequentially
+            if self.gemini_available:
+                logger.info("Using Gemini Nano Banana for image generation")
+                # For multiple images, generate them sequentially
                 for i in range(count):
                     # Add variation to each prompt
+                    variation_prompt = f"{base_prompt}\n\nImage {i+1} of {count}: Focus on a different aspect or angle of the scene."
+                    try:
+                        image_path = await self.generate_image_with_gemini(variation_prompt)
+                        image_paths.append(image_path)
+                    except Exception as e:
+                        logger.warning(f"Gemini generation failed for image {i+1}: {str(e)}")
+                        # If Gemini fails, try DALL-E as fallback
+                        if self.openai_available:
+                            logger.info("Falling back to DALL-E for remaining images")
+                            image_path = await self.generate_image_with_dalle(variation_prompt)
+                            image_paths.append(image_path)
+                        else:
+                            raise
+            
+            elif self.openai_available:
+                logger.info("Using OpenAI DALL-E for image generation")
+                # For multiple images, generate them sequentially with DALL-E
+                for i in range(count):
                     variation_prompt = f"{base_prompt}\n\nImage {i+1} of {count}: Focus on a different aspect or angle."
                     image_path = await self.generate_image_with_dalle(variation_prompt)
                     image_paths.append(image_path)

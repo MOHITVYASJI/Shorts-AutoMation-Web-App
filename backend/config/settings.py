@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # ElevenLabs
     elevenlabs_api_key: Optional[str] = os.environ.get("ELEVENLABS_API_KEY")
     
+    
+    # Emergent LLM Key (Universal key for OpenAI, Gemini, Claude)
+    emergent_llm_key: Optional[str] = os.environ.get("EMERGENT_LLM_KEY")
     # YouTube OAuth
     youtube_client_id: Optional[str] = os.environ.get("YOUTUBE_CLIENT_ID")
     youtube_client_secret: Optional[str] = os.environ.get("YOUTUBE_CLIENT_SECRET")

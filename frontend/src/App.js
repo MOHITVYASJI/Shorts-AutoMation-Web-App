@@ -8,6 +8,10 @@ import Layout from "@/components/layout/Layout";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import Dashboard from "@/pages/Dashboard";
+import CreateVideo from "@/pages/CreateVideo";
+import VideoLibrary from "@/pages/VideoLibrary";
+import Analytics from "@/pages/Analytics";
+import Accounts from "@/pages/Accounts";
 
 function App() {
   return (
@@ -27,10 +31,10 @@ function App() {
           >
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="create" element={<div className="text-white">Create Video - Coming Soon</div>} />
-            <Route path="videos" element={<div className="text-white">Video Library - Coming Soon</div>} />
-            <Route path="analytics" element={<div className="text-white">Analytics - Coming Soon</div>} />
-            <Route path="accounts" element={<div className="text-white">Accounts - Coming Soon</div>} />
+            <Route path="create" element={<CreateVideo />} />
+            <Route path="videos" element={<VideoLibrary />} />
+            <Route path="analytics" element={<Analytics />} />
+            <Route path="accounts" element={<Accounts />} />
             <Route path="settings" element={<div className="text-white">Settings - Coming Soon</div>} />
           </Route>
         </Routes>

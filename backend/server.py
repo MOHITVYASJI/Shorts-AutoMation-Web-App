@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from config.database import init_db, close_db
 from config.settings import get_settings
-from routes import auth, platforms, content
+from routes import auth, platforms, content, videos, publish
 
 # Configure logging
 logging.basicConfig(
@@ -56,6 +56,8 @@ async def health_check():
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(platforms.router, prefix="/platforms", tags=["Platforms"])
 api_router.include_router(content.router, prefix="/content", tags=["Content Generation"])
+api_router.include_router(videos.router, prefix="/videos", tags=["Videos"])
+api_router.include_router(publish.router, prefix="/publish", tags=["Publishing"])
 
 # Include the API router in the main app
 app.include_router(api_router)

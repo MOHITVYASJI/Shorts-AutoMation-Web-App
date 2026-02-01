@@ -3,9 +3,9 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
-import { Loader2, Mic, Play, Pause } from 'lucide-react';
+import { Loader2, Mic, Play, Pause, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import axios from 'axios';
+import { contentAPI } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -14,7 +14,7 @@ const VoiceSelector = ({ script, onVoiceGenerated, existingVoice }) => {
   const { token } = useAuth();
   const [loading, setLoading] = useState(false);
   const [voices, setVoices] = useState([]);
-  const [selectedVoice, setSelectedVoice] = useState('default');
+  const [selectedVoice, setSelectedVoice] = useState('21m00Tcm4TlvDq8ikWAM');
   const [generatedVoice, setGeneratedVoice] = useState(existingVoice || null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audio, setAudio] = useState(null);
@@ -30,17 +30,22 @@ const VoiceSelector = ({ script, onVoiceGenerated, existingVoice }) => {
 
   const fetchVoices = async () => {
     try {
-      const response = await axios.get(`${API_URL}/api/content/voices`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setVoices(response.data.voices || []);
+      const response = await contentAPI.getVoices();
+      const voiceData = response.voices || {};
+      // Convert voice object to array for select dropdown
+      const voiceArray = Object.entries(voiceData).map(([key, value]) => ({
+        id: value,
+        name: key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+      }));
+      setVoices(voiceArray);
     } catch (error) {
       console.error('Error fetching voices:', error);
       // Set default voices if API fails
       setVoices([
-        { id: 'default', name: 'Default Voice', language: 'english' },
-        { id: 'male1', name: 'Male Voice 1', language: 'english' },
-        { id: 'female1', name: 'Female Voice 1', language: 'english' }
+        { id: '21m00Tcm4TlvDq8ikWAM', name: 'Male 1' },
+        { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Female 1' },
+        { id: 'ErXwobaYiN019PkySvjV', name: 'Male 2' },
+        { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Female 2' }
       ]);
     }
   };
@@ -53,22 +58,23 @@ const VoiceSelector = ({ script, onVoiceGenerated, existingVoice }) => {
 
     setLoading(true);
     try {
-      const fullScript = `${script.hook} ${script.story} ${script.ending}`;
-      const response = await axios.post(
-        `${API_URL}/api/content/generate-voice`,
-        {
-          text: fullScript,
-          voice_id: selectedVoice,
-          language: script.language || 'english'
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
+      const fullScript = `${script.hook || ''} ${script.body || script.story || ''} ${script.ending || ''}`;
+      const response = await contentAPI.generateVoice({
+        text: fullScript,
+        voice_id: selectedVoice,
+        language: script.language || 'en'
+      });
 
-      setGeneratedVoice(response.data);
+      const voiceData = {
+        audio_path: response.audio_path,
+        audio_url: `${API_URL}${response.audio_path}`,
+        voice_id: selectedVoice,
+        duration: 30 // Approximate, will be calculated by backend
+      };
+
+      setGeneratedVoice(voiceData);
       toast.success('Voice generated successfully!');
-      onVoiceGenerated(response.data);
+      onVoiceGenerated(voiceData);
     } catch (error) {
       console.error('Error generating voice:', error);
       toast.error(error.response?.data?.detail || 'Failed to generate voice');
@@ -85,7 +91,10 @@ const VoiceSelector = ({ script, onVoiceGenerated, existingVoice }) => {
       setIsPlaying(false);
     } else {
       const newAudio = new Audio(generatedVoice.audio_url);
-      newAudio.play();
+      newAudio.play().catch(err => {
+        console.error('Error playing audio:', err);
+        toast.error('Failed to play audio');
+      });
       newAudio.onended = () => setIsPlaying(false);
       setAudio(newAudio);
       setIsPlaying(true);
@@ -115,8 +124,8 @@ const VoiceSelector = ({ script, onVoiceGenerated, existingVoice }) => {
 
             <div className="p-4 bg-slate-800 rounded-lg">
               <p className="text-sm text-slate-400 mb-2">Script Preview:</p>
-              <p className="text-white text-sm">
-                {script?.hook} {script?.story?.substring(0, 100)}...
+              <p className="text-white text-sm line-clamp-3">
+                {script?.hook} {(script?.body || script?.story || '').substring(0, 100)}...
               </p>
             </div>
 
@@ -147,7 +156,7 @@ const VoiceSelector = ({ script, onVoiceGenerated, existingVoice }) => {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-white font-medium">Voice Generated</h3>
-                  <p className="text-sm text-slate-400">Duration: {generatedVoice.duration}s</p>
+                  <p className="text-sm text-slate-400">Duration: ~{generatedVoice.duration}s</p>
                 </div>
                 <Button
                   onClick={togglePlayAudio}
@@ -170,7 +179,7 @@ const VoiceSelector = ({ script, onVoiceGenerated, existingVoice }) => {
 
               <div className="p-4 bg-slate-800 rounded-lg">
                 <p className="text-sm text-slate-400">Voice ID: {generatedVoice.voice_id}</p>
-                <p className="text-sm text-slate-400">File: {generatedVoice.filename}</p>
+                <p className="text-sm text-slate-400">File: {generatedVoice.audio_path?.split('/').pop()}</p>
               </div>
             </div>
           </Card>
@@ -181,6 +190,7 @@ const VoiceSelector = ({ script, onVoiceGenerated, existingVoice }) => {
               onClick={() => setGeneratedVoice(null)}
               className="flex-1 bg-slate-800 border-slate-700 text-white hover:bg-slate-700"
             >
+              <RefreshCw className="w-4 h-4 mr-2" />
               Regenerate
             </Button>
             <Button

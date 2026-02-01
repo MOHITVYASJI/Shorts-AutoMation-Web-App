@@ -6,15 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card } from '@/components/ui/card';
 import { Loader2, Sparkles, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import axios from 'axios';
+import { contentAPI } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
-
-const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 const ScriptGenerator = ({ onScriptGenerated, existingScript }) => {
   const { token } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [platforms, setPlatforms] = useState([]);
   const [niches, setNiches] = useState([]);
   const [languages, setLanguages] = useState([]);
   const [durations, setDurations] = useState([]);
@@ -22,7 +19,7 @@ const ScriptGenerator = ({ onScriptGenerated, existingScript }) => {
   const [formData, setFormData] = useState({
     platform: 'youtube',
     niche: '',
-    language: 'english',
+    language: 'English',
     duration: 30
   });
 
@@ -35,13 +32,13 @@ const ScriptGenerator = ({ onScriptGenerated, existingScript }) => {
   const fetchOptions = async () => {
     try {
       const [nichesRes, langsRes, dursRes] = await Promise.all([
-        axios.get(`${API_URL}/api/content/niches`),
-        axios.get(`${API_URL}/api/content/languages`),
-        axios.get(`${API_URL}/api/content/durations`)
+        contentAPI.getNiches(),
+        contentAPI.getLanguages(),
+        contentAPI.getDurations()
       ]);
-      setNiches(nichesRes.data.niches || []);
-      setLanguages(langsRes.data.languages || []);
-      setDurations(dursRes.data.durations || []);
+      setNiches(nichesRes.niches || []);
+      setLanguages(langsRes.languages || []);
+      setDurations(dursRes.durations || []);
     } catch (error) {
       console.error('Error fetching options:', error);
       toast.error('Failed to load options');
@@ -56,17 +53,11 @@ const ScriptGenerator = ({ onScriptGenerated, existingScript }) => {
 
     setLoading(true);
     try {
-      const response = await axios.post(
-        `${API_URL}/api/content/generate-script`,
-        formData,
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
-
-      setGeneratedScript(response.data);
+      const response = await contentAPI.generateScript(formData);
+      const scriptData = response.script || response;
+      setGeneratedScript(scriptData);
       toast.success('Script generated successfully!');
-      onScriptGenerated(response.data);
+      onScriptGenerated(scriptData);
     } catch (error) {
       console.error('Error generating script:', error);
       toast.error(error.response?.data?.detail || 'Failed to generate script');
@@ -115,7 +106,7 @@ const ScriptGenerator = ({ onScriptGenerated, existingScript }) => {
                   <SelectContent className="bg-slate-800 border-slate-700">
                     {niches.map(niche => (
                       <SelectItem key={niche} value={niche}>
-                        {niche.replace('_', ' ').toUpperCase()}
+                        {niche.replace('_', ' ').charAt(0).toUpperCase() + niche.replace('_', ' ').slice(1)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -130,8 +121,8 @@ const ScriptGenerator = ({ onScriptGenerated, existingScript }) => {
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-slate-700">
                     {languages.map(lang => (
-                      <SelectItem key={lang} value={lang}>
-                        {lang.charAt(0).toUpperCase() + lang.slice(1)}
+                      <SelectItem key={typeof lang === 'string' ? lang : lang.code} value={typeof lang === 'string' ? lang : lang.name}>
+                        {typeof lang === 'string' ? lang.charAt(0).toUpperCase() + lang.slice(1) : lang.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -145,11 +136,14 @@ const ScriptGenerator = ({ onScriptGenerated, existingScript }) => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-slate-700">
-                    {durations.map(dur => (
-                      <SelectItem key={dur} value={dur.toString()}>
-                        {dur} seconds
-                      </SelectItem>
-                    ))}
+                    {durations.map(dur => {
+                      const val = typeof dur === 'number' ? dur : dur.value;
+                      return (
+                        <SelectItem key={val} value={val.toString()}>
+                          {val} seconds
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -214,10 +208,10 @@ const ScriptGenerator = ({ onScriptGenerated, existingScript }) => {
               <div className="space-y-2">
                 <Label className="text-slate-300">Story / Main Content</Label>
                 <Textarea
-                  value={generatedScript.story || ''}
-                  onChange={(e) => handleEditScript('story', e.target.value)}
+                  value={generatedScript.body || generatedScript.story || ''}
+                  onChange={(e) => handleEditScript('body', e.target.value)}
                   className="bg-slate-800 border-slate-700 text-white min-h-[120px]"
-                  data-testid="script-story"
+                  data-testid="script-body"
                 />
               </div>
 
@@ -244,7 +238,7 @@ const ScriptGenerator = ({ onScriptGenerated, existingScript }) => {
               <div className="space-y-2">
                 <Label className="text-slate-300">Hashtags</Label>
                 <Textarea
-                  value={generatedScript.hashtags?.join(' ') || ''}
+                  value={Array.isArray(generatedScript.hashtags) ? generatedScript.hashtags.join(' ') : (generatedScript.hashtags || '')}
                   onChange={(e) => handleEditScript('hashtags', e.target.value.split(' ').filter(h => h))}
                   className="bg-slate-800 border-slate-700 text-white min-h-[60px]"
                   placeholder="#motivation #success #viral"

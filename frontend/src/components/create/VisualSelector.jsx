@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Loader2, Image as ImageIcon, RefreshCw, Check } from 'lucide-react';
 import { toast } from 'sonner';
-import axios from 'axios';
+import { contentAPI } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -13,7 +13,7 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
 const VisualSelector = ({ script, onVisualsSelected, existingVisuals }) => {
   const { token } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [visualPrompt, setVisualPrompt] = useState('');
+  const [visualStyle, setVisualStyle] = useState('realistic');
   const [generatedVisuals, setGeneratedVisuals] = useState(existingVisuals || []);
   const [selectedVisuals, setSelectedVisuals] = useState(existingVisuals || []);
 
@@ -25,21 +25,26 @@ const VisualSelector = ({ script, onVisualsSelected, existingVisuals }) => {
 
     setLoading(true);
     try {
-      const response = await axios.post(
-        `${API_URL}/api/content/generate-visuals`,
-        {
-          script: script.story || script.hook,
-          niche: script.niche || 'general',
-          style: visualPrompt || 'modern',
-          count: 5
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
+      const response = await contentAPI.generateVisuals({
+        script: script,
+        niche: script.niche || 'general',
+        style: visualStyle || 'realistic',
+        count: 3
+      });
 
-      setGeneratedVisuals(response.data.visuals || []);
-      toast.success('Visuals generated successfully!');
+      // Backend returns { success: true, image_paths: [...], count: 3 }
+      const imagePaths = response.image_paths || [];
+      
+      // Convert paths to full URLs
+      const visualsWithUrls = imagePaths.map((path, index) => ({
+        url: path.startsWith('http') ? path : `${API_URL}${path}`,
+        path: path,
+        index: index
+      }));
+
+      setGeneratedVisuals(visualsWithUrls);
+      setSelectedVisuals(visualsWithUrls); // Auto-select all generated visuals
+      toast.success(`Generated ${visualsWithUrls.length} visuals successfully!`);
     } catch (error) {
       console.error('Error generating visuals:', error);
       toast.error(error.response?.data?.detail || 'Failed to generate visuals');
@@ -65,14 +70,25 @@ const VisualSelector = ({ script, onVisualsSelected, existingVisuals }) => {
       <Card className="p-6 bg-slate-800/30 border-slate-700">
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label className="text-slate-300">Visual Style (Optional)</Label>
-            <Input
-              value={visualPrompt}
-              onChange={(e) => setVisualPrompt(e.target.value)}
-              placeholder="e.g., modern, minimalist, vibrant, dark"
-              className="bg-slate-800 border-slate-700 text-white"
-              data-testid="visual-prompt-input"
-            />
+            <Label className="text-slate-300">Visual Style</Label>
+            <select
+              value={visualStyle}
+              onChange={(e) => setVisualStyle(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 text-white rounded-md"
+              data-testid="visual-style-select"
+            >
+              <option value="realistic">Realistic / Photorealistic</option>
+              <option value="animated">Animated / Illustrated</option>
+              <option value="minimalist">Minimalist / Modern</option>
+              <option value="cinematic">Cinematic / Dramatic</option>
+            </select>
+          </div>
+
+          <div className="p-4 bg-slate-800 rounded-lg">
+            <p className="text-sm text-slate-400 mb-2">Script Context:</p>
+            <p className="text-white text-sm line-clamp-2">
+              {script?.title || script?.hook}
+            </p>
           </div>
 
           <Button
@@ -99,7 +115,7 @@ const VisualSelector = ({ script, onVisualsSelected, existingVisuals }) => {
       {generatedVisuals.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-slate-300">Select visuals for your video (click to select)</p>
+            <p className="text-slate-300">Select visuals for your video (click to toggle)</p>
             <p className="text-sm text-slate-400">{selectedVisuals.length} selected</p>
           </div>
 
@@ -119,6 +135,9 @@ const VisualSelector = ({ script, onVisualsSelected, existingVisuals }) => {
                   src={visual.url}
                   alt={`Visual ${index + 1}`}
                   className="w-full h-48 object-cover"
+                  onError={(e) => {
+                    e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect width="100" height="100" fill="%23334155"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="%23cbd5e1" font-family="sans-serif" font-size="14"%3EImage%3C/text%3E%3C/svg%3E';
+                  }}
                 />
                 {isSelected(visual) && (
                   <div className="absolute top-2 right-2 bg-indigo-600 rounded-full p-1">
@@ -145,7 +164,7 @@ const VisualSelector = ({ script, onVisualsSelected, existingVisuals }) => {
               className="flex-1 bg-indigo-600 hover:bg-indigo-700"
               data-testid="proceed-to-preview-button"
             >
-              Proceed to Preview →
+              Proceed to Preview ({selectedVisuals.length}) →
             </Button>
           </div>
         </div>
